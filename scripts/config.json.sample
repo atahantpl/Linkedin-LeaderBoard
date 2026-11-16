@@ -1,0 +1,23 @@
+{
+  "include_day_of_week": true,
+  "include_puzzle_numbers": true,
+  "export_csv_on_run": true,
+  "track_connections": true,
+  "my_name": "Your Name",
+  "friends_filter": [],
+  "output_path": "./",
+  "output_json": "results.json",
+  "output_csv": "results.csv",
+  "output_leaderboard": "leaderboard.json",
+  "anchor_game": "zip",
+  "games": [
+    "zip",
+    "tango",
+    "queens",
+    "mini_sudoku",
+    "patches",
+    "crossclimb",
+    "wend",
+    "pinpoint"
+  ]
+}

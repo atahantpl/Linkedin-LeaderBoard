@@ -1,0 +1,40 @@
+# Auth secrets and tokens - never commit these
+auth/
+
+# Debug output (screenshots + HTML dumps)
+debug/
+
+# Backup folder
+backup/
+
+# Stray credential/token files plus the user's local config.json, which is
+# seeded from config.json.sample on first run. The tracked template is
+# config.json.sample (it does not match *.json, so it stays version-controlled).
+*.json
+*.token
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Environment variable files
+.env
+.env.*
+!.env.example
+
+# Local research scratch and OS files
+research/
+.DS_Store
+
+# Miscellaneous files
+CHECKLIST.md
+results.csv
+results_import.json
+results_export.csv
+
