@@ -69,6 +69,7 @@ class Layout:
     track_connections: bool = False     # collect connection leaderboard data
     my_name: Optional[str] = None       # replaces LinkedIn's "Siz"/"You" label
     friends_filter: list[str] = field(default_factory=list)  # optional name filter
+    excluded_players: list[str] = field(default_factory=list)
     output_leaderboard: Optional[Path] = None  # composed output_path/output_leaderboard
     raw: dict = field(default_factory=dict)
 
@@ -274,6 +275,13 @@ def load_layout(path: Path | None = None) -> Layout:
         friends_filter = [str(x).strip() for x in friends_filter_raw if str(x).strip()]
     else:
         raise ValueError("friends_filter must be a list of name substrings")
+    excluded_raw = data.get("excluded_players", [])
+    if excluded_raw is None:
+        excluded_players: list[str] = []
+    elif isinstance(excluded_raw, list):
+        excluded_players = [str(x).strip() for x in excluded_raw if str(x).strip()]
+    else:
+        raise ValueError("excluded_players must be a list of name substrings")
 
     my_name_raw = data.get("my_name")
     my_name: Optional[str] = None
@@ -300,6 +308,7 @@ def load_layout(path: Path | None = None) -> Layout:
         track_connections=track_connections,
         my_name=my_name,
         friends_filter=friends_filter,
+        excluded_players=excluded_players,
         output_leaderboard=output_leaderboard,
         raw=data,
     )

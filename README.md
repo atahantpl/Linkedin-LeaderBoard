@@ -115,6 +115,7 @@ The keys you will normally change:
 | `my_name` | Your name as it should appear in leaderboards and Slack messages. LinkedIn labels you "You" or "Siz"; this replaces that label. **Replace the `Your Name` placeholder.** |
 | `track_connections` | `true` to also read your connections' leaderboards (needed for Slack). |
 | `friends_filter` | Optional list of names. When it is not empty, only those connections are shown. |
+| `excluded_players` | Optional list of names to hide from leaderboards and Slack messages. The remaining players are re-ranked. |
 | `games` | Games to collect, in column order. Valid keys: `zip`, `tango`, `queens`, `patches`, `mini_sudoku`, `crossclimb`, `wend`, `pinpoint`, `sumbreak`. |
 | `anchor_game` | The game you play first each day. It must be in `games`. `pinpoint` is the safest choice because it has no timer. |
 | `output_path` | Directory for `results.json`, `results.csv` and `leaderboard.json`. Use an absolute path or one starting with `~` so scheduled runs always write to the same place. |
@@ -247,6 +248,7 @@ Values used when a key is missing from `scripts/config.json`:
 | `export_csv_on_run` | `false` |
 | `track_connections` | `false` (set it to `true` for leaderboards and Slack) |
 | `friends_filter` | empty, so all connections are shown |
+| `excluded_players` | empty, so nobody is hidden |
 | `my_name` | not set, so LinkedIn's own "You" label is kept |
 | `output_path` | not set, so the directory you run the script from |
 | `output_json` / `output_csv` / `output_leaderboard` | `results.json` / `results.csv` / `leaderboard.json` |

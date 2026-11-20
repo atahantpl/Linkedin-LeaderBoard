@@ -5,6 +5,7 @@
   "track_connections": true,
   "my_name": "Your Name",
   "friends_filter": [],
+  "excluded_players": [],
   "output_path": "./",
   "output_json": "results.json",
   "output_csv": "results.csv",

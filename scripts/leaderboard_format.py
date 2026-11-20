@@ -101,23 +101,39 @@ def sorted_entries(game_key: str, game_data: dict) -> list[dict]:
     )
 
 
-def drop_bot_entry(entries: list[dict]) -> list[dict]:
-    mine = [e for e in entries if e.get("is_me")]
-    if not mine:
+def drop_entries(entries: list[dict], should_drop) -> list[dict]:
+    removed_ranks = [
+        entry_rank(e, i) for i, e in enumerate(entries, start=1) if should_drop(e)
+    ]
+    if not removed_ranks:
         return entries
-    removed_rank = min(
-        (entry_rank(e, i) for i, e in enumerate(entries, start=1) if e.get("is_me")),
-        default=None,
-    )
     kept: list[dict] = []
     for position, entry in enumerate(entries, start=1):
-        if entry.get("is_me"):
+        if should_drop(entry):
             continue
         rank = entry_rank(entry, position)
-        if removed_rank is not None and rank > removed_rank:
-            entry = {**entry, "rank": rank - 1}
+        shift = sum(1 for r in removed_ranks if r < rank)
+        if shift:
+            entry = {**entry, "rank": rank - shift}
         kept.append(entry)
     return kept
+
+
+def drop_bot_entry(entries: list[dict]) -> list[dict]:
+    return drop_entries(entries, lambda e: bool(e.get("is_me")))
+
+
+def is_excluded(entry: dict, excluded_players: list[str] | None) -> bool:
+    if not excluded_players or entry.get("is_me"):
+        return False
+    name = str(entry.get("name", "")).lower()
+    return any(p.lower() in name for p in excluded_players)
+
+
+def drop_excluded(entries: list[dict], excluded_players: list[str] | None) -> list[dict]:
+    if not excluded_players:
+        return entries
+    return drop_entries(entries, lambda e: is_excluded(e, excluded_players))
 
 
 def format_game_lines(
@@ -127,8 +143,9 @@ def format_game_lines(
     my_name: str | None = None,
     for_slack: bool = False,
     bot_played: bool = False,
+    excluded_players: list[str] | None = None,
 ) -> list[str]:
-    entries = sorted_entries(game_key, game_data)
+    entries = drop_excluded(sorted_entries(game_key, game_data), excluded_players)
     if bot_played:
         entries = drop_bot_entry(entries)
     if not entries:
@@ -187,6 +204,7 @@ def format_day_message(
             my_name=my_name,
             for_slack=for_slack,
             bot_played=game_key in bot_games,
+            excluded_players=layout.excluded_players,
         )
         if section:
             if for_slack and len(parts) > 1:
