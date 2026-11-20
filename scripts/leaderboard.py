@@ -17,9 +17,12 @@ import sys
 from pathlib import Path
 from leaderboard_format import (
     format_day_message,
+    drop_bot_entry,
     format_game_lines,
     linkedin_today,
+    read_bot_played,
     read_leaderboard_data,
+    sorted_entries,
 )
 from sheet_layout import load_layout
 
@@ -33,8 +36,9 @@ def print_game_leaderboard(
     *,
     show_source: bool = False,
     my_name: str | None = None,
+    bot_played: bool = False,
 ) -> None:
-    lines = format_game_lines(game_key, game_data, my_name=my_name, for_slack=False)
+    lines = format_game_lines(game_key, game_data, my_name=my_name, for_slack=False, bot_played=bot_played)
     if not lines:
         return
     if show_source:
@@ -63,7 +67,13 @@ def print_day(
         if game_filter not in games:
             logger.error("No leaderboard data for game %r on %s", game_filter, day_key)
             return
-        print_game_leaderboard(game_filter, games[game_filter], show_source=show_source, my_name=my_name)
+        print_game_leaderboard(
+            game_filter,
+            games[game_filter],
+            show_source=show_source,
+            my_name=my_name,
+            bot_played=game_filter in read_bot_played(day_key),
+        )
         return
 
     try:
@@ -71,7 +81,13 @@ def print_day(
         print(format_day_message(data, day_key, layout, for_slack=False))
     except Exception:
         for game_key in games:
-            print_game_leaderboard(game_key, games[game_key], show_source=show_source, my_name=my_name)
+            print_game_leaderboard(
+                game_key,
+                games[game_key],
+                show_source=show_source,
+                my_name=my_name,
+                bot_played=game_key in read_bot_played(day_key),
+            )
 
 
 def export_leaderboard_csv(data: dict, csv_path: Path) -> int:
@@ -79,8 +95,12 @@ def export_leaderboard_csv(data: dict, csv_path: Path) -> int:
     for day_key in sorted(data):
         rec = data[day_key] or {}
         games = rec.get("games") or {}
+        bot_games = read_bot_played(day_key)
         for game_key, game_data in games.items():
-            for entry in game_data.get("entries") or []:
+            entries = sorted_entries(game_key, game_data)
+            if game_key in bot_games:
+                entries = drop_bot_entry(entries)
+            for entry in entries:
                 rows.append([
                     day_key,
                     rec.get("day_of_week", ""),

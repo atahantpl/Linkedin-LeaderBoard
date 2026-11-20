@@ -110,4 +110,10 @@ GAMES = [
         "url":     "https://www.linkedin.com/games/pinpoint/results/",
         "is_time": False,  # Returns guesses (integer), not a time
     },
+    {
+        "key":     "sumbreak",
+        "name":    "Sumbreak",
+        "url":     "https://www.linkedin.com/games/sumbreak/results/",
+        "is_time": True,
+    },
 ]

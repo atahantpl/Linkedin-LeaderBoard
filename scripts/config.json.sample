@@ -18,6 +18,7 @@
     "patches",
     "crossclimb",
     "wend",
-    "pinpoint"
+    "pinpoint",
+    "sumbreak"
   ]
 }

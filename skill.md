@@ -33,7 +33,7 @@ offer to help the user tailor these fields to their preferences:
 
 - `games` — the list of game keys to collect, in CSV column order. Reorder to
   taste, or omit games to exclude them. Valid keys: `zip`, `tango`, `queens`,
-  `patches`, `mini_sudoku`, `crossclimb`, `wend`, `pinpoint`.
+  `patches`, `mini_sudoku`, `crossclimb`, `wend`, `pinpoint`, `sumbreak`.
 - `anchor_game` — used for played/unplayed detection; must be one of the keys
   present in `games`. Recommend the user set this to whichever game they play
   first each day, since its results page is the most likely to be complete on a

@@ -1,7 +1,7 @@
 # LinkedIn Games Data Collector
 
 Collects your daily LinkedIn Games scores (Zip, Tango, Queens, Mini Sudoku, Patches,
-CrossClimb, Wend, Pinpoint) with Playwright and BeautifulSoup, keeps them in a local
+CrossClimb, Wend, Pinpoint, Sumbreak) with Playwright and BeautifulSoup, keeps them in a local
 JSON store that imports cleanly into Pandas, and can export a CSV for Google Sheets or
 Excel. An optional service also plays the day's games, reads your connections'
 leaderboards and posts a summary to a Slack channel.
@@ -115,7 +115,7 @@ The keys you will normally change:
 | `my_name` | Your name as it should appear in leaderboards and Slack messages. LinkedIn labels you "You" or "Siz"; this replaces that label. **Replace the `Your Name` placeholder.** |
 | `track_connections` | `true` to also read your connections' leaderboards (needed for Slack). |
 | `friends_filter` | Optional list of names. When it is not empty, only those connections are shown. |
-| `games` | Games to collect, in column order. Valid keys: `zip`, `tango`, `queens`, `patches`, `mini_sudoku`, `crossclimb`, `wend`, `pinpoint`. |
+| `games` | Games to collect, in column order. Valid keys: `zip`, `tango`, `queens`, `patches`, `mini_sudoku`, `crossclimb`, `wend`, `pinpoint`, `sumbreak`. |
 | `anchor_game` | The game you play first each day. It must be in `games`. `pinpoint` is the safest choice because it has no timer. |
 | `output_path` | Directory for `results.json`, `results.csv` and `leaderboard.json`. Use an absolute path or one starting with `~` so scheduled runs always write to the same place. |
 | `export_csv_on_run` | `true` regenerates the CSV after every run. |
@@ -217,17 +217,21 @@ How it behaves:
 
 - It plays on the account saved by `setup_auth.py`, the same account that is collected.
 - Games that are already finished today, whether you played them by hand or the bot did
-  earlier, are skipped. The bot never replays a game.
-- It is deliberately slow. Each game is played over a target of **240 seconds** (random
-  pauses between moves, about 0.6x to 1.4x of the average), so the bot's time normally
-  lands low in the ranking instead of beating real players. This is not a guarantee.
-  Eight games take roughly half an hour including page loading.
-- Every game it plays is written to `scripts/bot_played.json`. In the terminal output
-  and in Slack, your entry for those games gets a `(bot)` tag next to your name, for
-  example `1. Your Name (bot) — 0:07`. Games you played yourself are not tagged, so
-  everyone can tell a bot result from a real one.
-- Change the pace with `python service.py --play-duration 120` or `python play.py
-  --game all --duration 120`. Skip the bot completely with `python service.py
+  earlier, are skipped. The bot never replays a game and, for those games, only reads the
+  results. It checks this by opening the game's results page before it starts.
+- It plays fast. Each game is played over a target of **30 seconds** (random pauses
+  between moves, about 0.6x to 1.4x of the average). Eight games take a few minutes
+  including page loading, so the results are ready soon after the run starts.
+- Every game it plays is written to `scripts/bot_played.json`. For those games your own
+  entry is **removed from the leaderboard** in the terminal output and in the Slack
+  message, because a bot time is not a real result. The players below you move up one
+  rank (a player who was 4th becomes 3rd). If you were the only entry for a game, that
+  game is left out of the message. Games you played yourself stay in the list. The same
+  rule applies to the CSV written by `leaderboard.py --export-csv`.
+- Your personal files (`results.json`, `results.csv`) are a score tracker for your own
+  account and still contain the time the bot achieved.
+- Change the pace with `python service.py --play-duration 60` or `python play.py
+  --game all --duration 60`. Skip the bot completely with `python service.py
   --no-play` (use this if you play your own games).
 
 Reminder: automatic playing may violate LinkedIn's terms (see the disclaimer).
@@ -253,20 +257,20 @@ The shipped `config.json.sample` (copied to `config.json` on the first run) over
 several of these: day of week, puzzle numbers, `export_csv_on_run` and
 `track_connections` are `true`, `output_path` is `./`, `anchor_game` is `zip`, `my_name`
 is `Your Name`, and `games` is `zip, tango, queens, mini_sudoku, patches, crossclimb,
-wend, pinpoint`.
+wend, pinpoint, sumbreak`.
 
 Command-line and behavior defaults:
 
 | Behavior | Default |
 |----------|---------|
-| Bot pace (`--duration`) | 240 seconds per game |
+| Bot pace (`--duration`) | 30 seconds per game |
 | Games the bot plays (`play.py --game`) | none, you must pass `all` or one game; `service.py` always uses `all` |
 | `collector.py` | smart mode, fetches only what is missing; `--update` re-fetches everything |
 | `service.py` | plays unfinished games, then runs the collector with `--update`, then posts to Slack |
 | Slack without `SLACK_WEBHOOK_URL` | the message is printed instead of posted |
 | Leaderboard date | today, in US Pacific time (LinkedIn resets at midnight Pacific) |
 | Monkey emoji | shown for every rank below 3rd place |
-| Bot tag | `(bot)` next to your name, for games the bot played |
+| Your entry in games the bot played | removed from the leaderboard, ranks below shift up by one |
 | Slack and terminal language | English |
 
 ## 9. Running it every day

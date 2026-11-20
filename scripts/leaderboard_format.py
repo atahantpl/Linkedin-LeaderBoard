@@ -17,7 +17,6 @@ _LINKEDIN_TZ = ZoneInfo("America/Los_Angeles")
 TOP_RANK = 3
 MONKEY_EMOJI = "🐒"
 BOT_PLAYED_PATH = SCRIPTS_DIR / "bot_played.json"
-BOT_TAG = "(bot)"
 
 
 def read_bot_played(day_key: str, path: Path = BOT_PLAYED_PATH) -> set[str]:
@@ -102,6 +101,25 @@ def sorted_entries(game_key: str, game_data: dict) -> list[dict]:
     )
 
 
+def drop_bot_entry(entries: list[dict]) -> list[dict]:
+    mine = [e for e in entries if e.get("is_me")]
+    if not mine:
+        return entries
+    removed_rank = min(
+        (entry_rank(e, i) for i, e in enumerate(entries, start=1) if e.get("is_me")),
+        default=None,
+    )
+    kept: list[dict] = []
+    for position, entry in enumerate(entries, start=1):
+        if entry.get("is_me"):
+            continue
+        rank = entry_rank(entry, position)
+        if removed_rank is not None and rank > removed_rank:
+            entry = {**entry, "rank": rank - 1}
+        kept.append(entry)
+    return kept
+
+
 def format_game_lines(
     game_key: str,
     game_data: dict,
@@ -111,6 +129,8 @@ def format_game_lines(
     bot_played: bool = False,
 ) -> list[str]:
     entries = sorted_entries(game_key, game_data)
+    if bot_played:
+        entries = drop_bot_entry(entries)
     if not entries:
         return []
 
@@ -126,8 +146,6 @@ def format_game_lines(
     for position, entry in enumerate(entries, start=1):
         rank = entry_rank(entry, position)
         name = format_player_name(entry, position, my_name=my_name, marker=marker)
-        if bot_played and entry.get("is_me"):
-            name = f"{name} {BOT_TAG}"
         score = entry.get("score", "—")
         if for_slack:
             me_tag = " _(you)_" if entry.get("is_me") else ""

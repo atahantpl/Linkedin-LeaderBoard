@@ -196,13 +196,14 @@ not a literal copy-paste config:
     "mini_sudoku",
     "crossclimb",
     "wend",
-    "pinpoint"
+    "pinpoint",
+    "sumbreak"
   ]
 }
 ```
 
 Valid game keys: `zip`, `tango`, `queens`, `patches`, `mini_sudoku`,
-`crossclimb`, `wend`, `pinpoint`. `anchor_game` must be one of the keys present
+`crossclimb`, `wend`, `pinpoint`, `sumbreak`. `anchor_game` must be one of the keys present
 in `games`; otherwise startup fails with a clear error. A game listed more than
 once in `games` is collected only once — the duplicate is ignored and a warning
 is logged so you can remove it.
@@ -467,7 +468,7 @@ From `scripts/` with the virtual environment activated:
 ```bash
 python service.py                 # play + collect scores + post to Slack
 python service.py --no-play       # collect + post, games already played by hand
-python service.py --play-duration 300   # target seconds per game (default 240)
+python service.py --play-duration 300   # target seconds per game (default 30)
 python service.py --dry-run       # play + collect, print message, do not post
 python service.py --slack-only    # post existing leaderboard.json only
 python service.py --message-only  # print formatted message only

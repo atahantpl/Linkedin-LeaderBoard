@@ -138,6 +138,14 @@ def _sdui_game(document: str) -> Optional[dict]:
     return None
 
 
+SDUI_DEFAULT_COMPLETION_KEYS = {"$type", "isMistakeFree", "isHintFree"}
+
+
+def _sdui_finished(game: dict) -> bool:
+    attrs = (game.get("gameState") or {}).get("completionAttributes") or {}
+    return bool(set(attrs) - SDUI_DEFAULT_COMPLETION_KEYS)
+
+
 def _load_game_data(page: Page, capture: PageCapture, spec: dict) -> Optional[GameData]:
     if spec["ui"] == "voyager":
         item = capture.voyager_item or _voyager_from_html(page.content(), spec["type_id"])
@@ -160,7 +168,7 @@ def _load_game_data(page: Page, capture: PageCapture, spec: dict) -> Optional[Ga
     return GameData(
         game["puzzle"][case],
         guest=not player.get("memberId"),
-        finished=bool((game.get("gameState") or {}).get("completionAttributes")),
+        finished=_sdui_finished(game),
         puzzle_id=(game.get("gameUrn") or {}).get("puzzleId"),
     )
 
@@ -336,16 +344,46 @@ def play_pinpoint(page: Page, frame: Frame, puzzle: dict, duration: float) -> No
         box.first.press("Enter")
 
 
-def _crossclimb_order(frame: Frame) -> list[int]:
-    return [int(x) for x in frame.locator(".crossclimb__guess").evaluate_all(
-        "els => els.map(e => e.getAttribute('data-guess-id'))"
-    )]
+def _crossclimb_words(frame: Frame) -> list[str]:
+    return frame.locator(".crossclimb__guess").evaluate_all(
+        "els => els.map(e => Array.from(e.querySelectorAll('input')).map(i => i.value).join(''))"
+    )
 
 
 def _crossclimb_type(page: Page, frame: Frame, guess_id: int, word: str) -> None:
-    frame.locator(f".crossclimb__guess[data-guess-id='{guess_id}']").click()
+    row = frame.locator(f".crossclimb__guess[data-guess-id='{guess_id}']")
+    have = "".join(row.locator("input").evaluate_all("els => els.map(e => e.value)"))
+    if have == word:
+        return
+    if not word.startswith(have):
+        have = ""
+    row.locator("input").nth(len(have)).click()
     page.wait_for_timeout(random.randint(200, 400))
-    page.keyboard.type(word, delay=random.randint(120, 220))
+    page.keyboard.type(word[len(have):], delay=random.randint(120, 220))
+    page.wait_for_timeout(400)
+
+
+def _crossclimb_move(page: Page, frame: Frame, src_slot: int, dst_slot: int) -> None:
+    handle = frame.locator(
+        f".crossclimb__guess[data-guess-id='{src_slot}'] .crossclimb__guess-dragger"
+    ).first
+    box = handle.bounding_box()
+    if box is None:
+        raise RuntimeError(f"Crossclimb handle not visible for row {src_slot}")
+    sx, sy = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    _, src_y = _center(frame, f".crossclimb__guess[data-guess-id='{src_slot}']")
+    _, dst_y = _center(frame, f".crossclimb__guess[data-guess-id='{dst_slot}']")
+    ty = sy + (dst_y - src_y) + (8 if dst_y > src_y else -8)
+    steps = max(8, int(abs(ty - sy) // 12))
+    page.mouse.move(sx, sy)
+    page.mouse.down()
+    page.wait_for_timeout(random.randint(250, 350))
+    for i in range(1, steps + 1):
+        page.mouse.move(sx, sy + (ty - sy) * i / steps)
+        page.wait_for_timeout(25)
+    page.wait_for_timeout(random.randint(350, 450))
+    page.mouse.up()
+    page.wait_for_timeout(900)
 
 
 def play_crossclimb(page: Page, frame: Frame, puzzle: dict, duration: float) -> None:
@@ -358,26 +396,19 @@ def play_crossclimb(page: Page, frame: Frame, puzzle: dict, duration: float) -> 
         page.wait_for_timeout(int(next(waits) * 1000))
         _crossclimb_type(page, frame, guess_id, rungs[guess_id]["word"])
 
+    word_at_position = {r["solutionRungIndex"]: r["word"] for r in rungs}
     for target_pos in middle:
-        wanted = next(i for i, r in enumerate(rungs) if r["solutionRungIndex"] == target_pos)
+        wanted = word_at_position[target_pos]
         for _ in range(3):
-            order = _crossclimb_order(frame)
-            if order[target_pos] == wanted:
+            current = _crossclimb_words(frame)
+            if current[target_pos] == wanted:
                 break
-            src = f".crossclimb__guess[data-guess-id='{wanted}']"
-            dst = f".crossclimb__guess[data-guess-id='{order[target_pos]}']"
-            sx, sy = _center(frame, src)
-            dx, dy = _center(frame, dst)
-            page.mouse.move(sx, sy)
-            page.mouse.down()
-            page.wait_for_timeout(random.randint(200, 350))
-            page.mouse.move(dx, dy + (-6 if dy < sy else 6), steps=15)
-            page.wait_for_timeout(random.randint(250, 450))
-            page.mouse.up()
-            page.wait_for_timeout(600)
+            if wanted not in current[1:last]:
+                break
+            _crossclimb_move(page, frame, current.index(wanted, 1, last), target_pos)
         else:
-            logger.warning(f"Crossclimb: could not move rung {wanted} to position {target_pos}")
-    logger.info(f"Crossclimb order now {_crossclimb_order(frame)}")
+            logger.warning(f"Crossclimb: could not move {wanted} to position {target_pos}")
+    logger.info(f"Crossclimb order now {_crossclimb_words(frame)[1:last]}")
 
     for guess_id in (0, last):
         page.wait_for_timeout(int(next(waits) * 1000))
@@ -410,12 +441,28 @@ def _finished_view(page: Page) -> bool:
     return False
 
 
-def _wait_for_finish(page: Page, timeout_s: float = 30) -> bool:
+RESULTS_URL = "https://www.linkedin.com/games/{slug}/results/"
+
+
+def _results_available(page: Page, slug: str, settle_s: float = 6.0) -> bool:
+    try:
+        page.goto(RESULTS_URL.format(slug=slug), wait_until="domcontentloaded", timeout=30_000)
+    except Exception:
+        return False
+    deadline = time.monotonic() + settle_s
+    while time.monotonic() < deadline:
+        if "/results" not in page.url:
+            return False
+        page.wait_for_timeout(500)
+    return "/results" in page.url and "login" not in page.url
+
+
+def _wait_for_finish(page: Page, slug: str, timeout_s: float = 30) -> bool:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        if _finished_view(page):
+        if _finished_view(page) or _results_available(page, slug):
             return True
-        page.wait_for_timeout(1_000)
+        page.wait_for_timeout(2_000)
     return False
 
 
@@ -423,11 +470,13 @@ def play_one(page: Page, game_key: str, *, duration: float, guest: bool, debug_d
     spec = GAMES[game_key]
     capture = PageCapture(spec["slug"], spec["type_id"])
     page.on("response", capture.on_response)
+    moves_started = False
     try:
-        page.goto(f"https://www.linkedin.com/games/{spec['slug']}/", wait_until="domcontentloaded", timeout=30_000)
-        if "/results" in page.url:
-            logger.info(f"{game_key}: already played today — skipping")
+        if not guest and _results_available(page, spec["slug"]):
+            logger.info(f"{game_key}: already finished today — skipping")
             return True
+
+        page.goto(f"https://www.linkedin.com/games/{spec['slug']}/", wait_until="domcontentloaded", timeout=30_000)
 
         data = None
         deadline = time.monotonic() + 20
@@ -441,7 +490,7 @@ def play_one(page: Page, game_key: str, *, duration: float, guest: bool, debug_d
         if not guest and data.guest:
             logger.error(f"{game_key}: page loaded as a guest — saved session is invalid. Run setup_auth.py.")
             return False
-        if data.finished or _finished_view(page):
+        if data.finished:
             logger.info(f"{game_key}: already finished today — skipping")
             return True
 
@@ -451,25 +500,40 @@ def play_one(page: Page, game_key: str, *, duration: float, guest: bool, debug_d
         _dismiss_dialogs(page)
         frame = _game_frame(page, spec["slug"], spec["board"])
         logger.info(f"{game_key} #{data.puzzle_id}: playing over ~{duration:.0f}s")
+        started = time.monotonic()
+        moves_started = True
         spec["play"](page, frame, data.puzzle, duration)
+        logger.info(f"{game_key}: moves entered in {time.monotonic() - started:.0f}s, waiting for completion")
 
-        done = _wait_for_finish(page)
         if debug_dir:
             debug_dir.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(debug_dir / f"{game_key}_end.png"), full_page=True)
             (debug_dir / f"{game_key}_puzzle.json").write_text(json.dumps(data.puzzle), encoding="utf-8")
+        done = _wait_for_finish(page, spec["slug"])
         if done:
             logger.info(f"{game_key}: solved")
             if not guest:
                 record_bot_played(game_key)
         else:
-            logger.error(f"{game_key}: moves entered but no finished view detected")
+            logger.error(f"{game_key}: moves entered but completion not confirmed (url: {page.url})")
         return done
     except Exception as exc:
-        logger.error(f"{game_key}: {exc}")
+        first_line = (str(exc).splitlines() or [repr(exc)])[0]
+        logger.error(f"{game_key}: {first_line}")
         if debug_dir:
             debug_dir.mkdir(parents=True, exist_ok=True)
-            page.screenshot(path=str(debug_dir / f"{game_key}_error.png"), full_page=True)
+            try:
+                page.screenshot(path=str(debug_dir / f"{game_key}_error.png"), full_page=True)
+                (debug_dir / f"{game_key}_error.html").write_text(page.content(), encoding="utf-8")
+            except Exception:
+                pass
+        if not guest and _results_available(page, spec["slug"]):
+            if moves_started:
+                logger.info(f"{game_key}: solved (completion confirmed on the results page)")
+                record_bot_played(game_key)
+            else:
+                logger.info(f"{game_key}: already finished today — skipping")
+            return True
         return False
     finally:
         page.remove_listener("response", capture.on_response)
@@ -507,7 +571,7 @@ def play(game_keys: list[str], *, duration: float, guest: bool, debug_dir: Optio
 def main() -> int:
     parser = argparse.ArgumentParser(description="Play today's LinkedIn games on the saved account")
     parser.add_argument("--game", choices=["all", *GAMES], required=True)
-    parser.add_argument("--duration", type=float, default=240, help="Target seconds per game (default 240)")
+    parser.add_argument("--duration", type=float, default=30, help="Target seconds per game (default 30)")
     parser.add_argument("--guest", action="store_true", help="Play logged out (test run, nothing is recorded)")
     parser.add_argument("--debug", action="store_true", help="Save end screenshot + puzzle JSON to debug/play/")
     args = parser.parse_args()
